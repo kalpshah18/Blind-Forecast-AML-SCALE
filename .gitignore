@@ -1,0 +1,17 @@
+# competition data (download from Kaggle; redistribution not ours to do)
+train.csv
+test.csv
+scales.csv
+sample_submission.csv
+# generated artefacts
+submission*.csv
+oof/
+logs/
+__pycache__/
+*.pyc
+# local working notes / credentials
+CLAUDE.md
+.claude/
+.kaggle/
+kaggle.json
+.env
