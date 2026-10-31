@@ -1,7 +1,7 @@
 """End-to-end reproduction of the final submission from the provided competition files only.
 
     python reproduce.py [--out submission.csv] [--compare other_submission.csv]
-                        [--refit-weights] [--ksel]
+                        [--refit-weights] [--ksel] [--nn12b]
 
 Pipeline (see README.md for details):
   1. climatology per station (4-harmonic regression) and scaled anomalies from train.csv
@@ -37,6 +37,9 @@ def main():
     ap.add_argument("--compare", help="existing submission csv to compare against (mean |difference|)")
     ap.add_argument("--refit-weights", action="store_true",
                     help="regenerate blend_weights.json via the full five-fold out-of-fold procedure (slow)")
+    ap.add_argument("--nn12b", action="store_true",
+                    help="use the 12-seed network with larger augmentation (0.7/0.4), blended with the six-seed "
+                         "network's weights (blend_weights_nn12b_proxy.json); public leaderboard 0.6762")
     ap.add_argument("--ksel", action="store_true",
                     help="choose the offset harmonic order per cell by held-out residual (scored worse on the public "
                          "leaderboard: 0.6798 vs 0.6753); default is a first-harmonic offset in every cell")
@@ -61,7 +64,10 @@ def main():
         print(f"[refit-weights] done after {(time.time() - t0) / 60:.1f} min", flush=True)
 
     t1 = time.time()
-    adapt.main(args.out, MODELS, weights=WEIGHTS)
+    if args.nn12b:
+        adapt.main(args.out, ["lad_seas", "gbm", "nn12b"], weights="blend_weights_nn12b_proxy.json")
+    else:
+        adapt.main(args.out, MODELS, weights=WEIGHTS)
     print(f"\nfinal fit + prediction + blend: {(time.time() - t1) / 60:.1f} min; "
           f"total: {(time.time() - t0) / 60:.1f} min", flush=True)
 
