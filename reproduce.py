@@ -1,11 +1,11 @@
 """End-to-end reproduction of the final submission from the provided competition files only.
 
     python reproduce.py [--out submission.csv] [--compare other_submission.csv]
-                        [--refit-weights] [--no-ksel]
+                        [--refit-weights] [--ksel]
 
 Pipeline (see README.md for details):
   1. climatology per station (4-harmonic regression) and scaled anomalies from train.csv
-  2. test-time adaptation from the unlabelled test inputs: per-cell seasonal offset, dispersion
+  2. test-time adaptation from the unlabelled test inputs: per-cell seasonal offset (first harmonic), dispersion
      ratio correction, pooled station-normalised model for S0 wind
   3. fit the three models on all of train (per-station LAD regression, LightGBM, 6-seed MLP with
      shift/scale augmentation) and predict the adapted test windows
@@ -37,8 +37,9 @@ def main():
     ap.add_argument("--compare", help="existing submission csv to compare against (mean |difference|)")
     ap.add_argument("--refit-weights", action="store_true",
                     help="regenerate blend_weights.json via the full five-fold out-of-fold procedure (slow)")
-    ap.add_argument("--no-ksel", action="store_true",
-                    help="use a fixed first-harmonic offset for every cell instead of the per-cell selection")
+    ap.add_argument("--ksel", action="store_true",
+                    help="choose the offset harmonic order per cell by held-out residual (scored worse on the public "
+                         "leaderboard: 0.6798 vs 0.6753); default is a first-harmonic offset in every cell")
     args = ap.parse_args()
 
     missing = [f for f in DATA if not os.path.exists(f)]
@@ -47,7 +48,7 @@ def main():
 
     import adapt, blend, nn
     import torch
-    adapt.KSEL = not args.no_ksel
+    adapt.KSEL = args.ksel
     print(f"device for the neural net: {nn.DEVICE}  (torch {torch.__version__})", flush=True)
     t0 = time.time()
 

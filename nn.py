@@ -98,3 +98,8 @@ def fit_predict6a(train, test):
 
 def fit_predict6g(train, test):
     return fit_predict(train, test, seeds=6, aug=(0.3, 0.2), arch="gru")
+
+
+def fit_predict12b(train, test):
+    """12 seeds, larger shift/scale augmentation (offset sd 0.7, log-scale sd 0.4)."""
+    return fit_predict(train, test, seeds=12, aug=(0.7, 0.4))

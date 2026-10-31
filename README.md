@@ -67,8 +67,8 @@ Inspection of the test inputs shows that the test windows do not come from the t
 
 The correction uses only the unlabelled test inputs (the ten observed days of each window), which the competition files provide, and proceeds in three steps:
 
-1. **Seasonal offset.** For every (station, variable) cell, the test-input anomalies are regressed on the first `k` harmonics of the day of year (ridge-regularised; 89 windows, or 890 observed days, per station). The fitted offset is added to the climatology of that cell. The harmonic order `k` in {0, 1, 2} is chosen per cell by repeated 50/50 splits of the test windows (20 repetitions) using held-out absolute residuals; `k = 1` is retained unless another order reduces the held-out error by more than 2%.
-2. **Dispersion correction.** For each cell, the ratio of the mean absolute residual of the test inputs (after step 1) to the mean absolute anomaly of the training series on the same days of the year (matched within +/- 10 days) is computed. Where the ratio lies outside [0.8, 1.25], inputs are divided by it before prediction and the predicted anomalies are multiplied by it afterwards. Ratios are clipped to [0.5, 4]. Large ratios occur for wind at `S0`, `S6` and `S8` (2.9, 1.8, 2.7), for tmax at `S0` and `S9` (1.35, 1.45), for tmin at `S9` (1.25) and for humidity at `S8` (1.26).
+1. **Seasonal offset.** For every (station, variable) cell, the test-input anomalies are regressed on the first `k` harmonics of the day of year (ridge-regularised; 89 windows, or 890 observed days, per station). The fitted offset is added to the climatology of that cell. The harmonic order is fixed at `k = 1` for every cell. Selecting `k` in {0, 1, 2} per cell from held-out residuals of the test inputs was implemented (`adapt.py --ksel` in `reproduce.py`) but scored worse on the public leaderboard (0.6798 against 0.6753) and is therefore disabled.
+2. **Dispersion correction.** For each cell, the ratio of the mean absolute residual of the test inputs (after step 1) to the mean absolute anomaly of the training series on the same days of the year (matched within +/- 10 days) is computed. Where the ratio lies outside [0.8, 1.25], inputs are divided by it before prediction and the predicted anomalies are multiplied by it afterwards. Ratios are clipped to [0.5, 4]. Large ratios occur for wind at `S0`, `S6` and `S8` (2.9, 1.8, 2.7), for tmax at `S0` and `S9` (1.4, 1.45), for tmin at `S9` (1.25) and for humidity at `S8` (1.26).
 3. **Pooled model for one cell.** In training, wind at `S0` is almost constant noise (lag-1 autocorrelation 0.25, against 0.49 in the test inputs and about 0.5 to 0.6 at the other stations), so its own history gives unrepresentative dynamics. The forecast for that single cell comes from a LAD regression trained on the station-normalised anomalies of the seven stations whose train and test behaviour agree (`S1` to `S5`, `S7`, `S9`). A leave-one-station-out experiment shows that pooling in this way costs only about 1.5% of the wind MAE at a normal station.
 
 ## 4. Validation
@@ -108,7 +108,9 @@ Skill is concentrated at short horizons: for the neural network, the per-step sc
 | More climatology harmonics (4 to 8) | ridge CV 0.6408 to 0.6403: negligible |
 | Trend term in the climatology | not supported: no trend in training anomalies |
 | Clipping forecasts to physical bounds | no forecast violates humidity <= 100, wind >= 0 or tmin <= tmax |
-| Offset harmonic order 0 / 1 / 2 / 3 (held-out residual, mean over cells) | 0.890 / 0.877 / 0.872 / 0.887; order 2 helps specific cells (for example `S8` tmin, 1.909 to 1.758) |
+| Offset harmonic order 0 / 1 / 2 / 3 (held-out residual of the test inputs, mean over cells) | 0.890 / 0.877 / 0.872 / 0.887; order 2 helps specific cells (for example `S8` tmin, 1.909 to 1.758). Per-cell selection nevertheless scored 0.6798 on the public leaderboard against 0.6753 for a fixed first harmonic, so it was not adopted |
+| Dispersion correction switched off (public leaderboard) | 0.6750 against 0.6753: no measurable effect once the network is trained with scale augmentation, which already makes it nearly scale-equivariant; the correction is retained for the linear and tree models |
+| 12 seeds with larger augmentation (offset sd 0.7, log-scale sd 0.4), blended with the six-seed weights (public leaderboard) | 0.6762 against 0.6753: no improvement |
 | Analog forecaster in the blend | receives about 2% weight; dropped |
 | Generative (GAN) synthetic data; station-specific modelling using the identity of the IIT Gandhinagar station | not pursued: the former adds no information beyond the 274,000 station-days available, and the latter would require knowledge from outside the provided files |
 
@@ -127,11 +129,11 @@ Python 3.12 with `numpy` 1.26, `pandas` 2.2, `lightgbm` 4.7 and `torch` 2.9 (see
 
 The blend weights are read from `blend_weights.json`. That file was produced by this repository's code (`python blend.py export blend_weights.json lad_seas gbm nn6a`) from the five-fold out-of-fold predictions of the same three models on `train.csv`; regenerating it requires retraining every model five times and exceeds the 30-minute budget, which is why it is stored. `python reproduce.py --refit-weights` regenerates it from scratch for verification.
 
-Options: `--no-ksel` uses a first-harmonic offset in every cell (the configuration that scored 0.6753 on the public leaderboard), and `--compare other.csv` reports the mean absolute difference from an existing submission.
+Options: `--ksel` enables the per-cell choice of offset harmonic order (disabled by default because it scored worse on the public leaderboard), and `--compare other.csv` reports the mean absolute difference from an existing submission. The default configuration is the one that scored 0.6753.
 
 ### 6.3 Runtime and determinism
 
-On an 8-thread CPU (no GPU) the complete default run takes about 4.7 minutes. On a CPU the output is deterministic: a repeated run reproduced the stored per-cell-offset submission with a mean absolute difference of 0.00000 scaled units. A GPU run was not tested; GPU kernels and random streams differ, so small numerical differences in the network's predictions are to be expected.
+On an 8-thread CPU (no GPU) the complete default run takes about 4.7 minutes. On a CPU the output is deterministic: repeated runs reproduced the stored submissions (the default configuration, which scored 0.6753, and the `--ksel` variant) with a mean absolute difference of 0.00000 scaled units. A GPU run was not tested; GPU kernels and random streams differ, so small numerical differences in the network's predictions are to be expected.
 
 ## 7. Compliance with the competition rules
 
@@ -144,7 +146,7 @@ On an 8-thread CPU (no GPU) the complete default run takes about 4.7 minutes. On
 
 * The adaptation parameters are estimated from 89 windows per station and could be imperfect in cells where the shift or the variability is large and strongly seasonal (for example humidity and wind at `S8`).
 * The choice of which cells receive a dispersion correction and a pooled model was made by inspecting the test inputs, so it cannot be validated by cross-validation; it was supported by simulation and by the public score, which covers 30% of the windows.
-* The harmonic-order selection and its 2% margin are heuristics. Their expected effect (about 0.001 to 0.002) is below the resolution of the public leaderboard.
+* The public leaderboard covers 30% of the windows, so differences of about 0.002 or less between the final candidates (0.6750 to 0.6762) cannot be resolved. The final choice among them rests on cross-validation, simulation and a preference for the simpler pipeline, not on the public score.
 
 ## 9. Repository layout
 
